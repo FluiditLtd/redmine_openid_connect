@@ -4,6 +4,8 @@ class OicSession < ActiveRecord::Base
   before_create :randomize_state!
   before_create :randomize_nonce!
 
+  @@default_headers = { 'User-Agent' => "Httparty/#{HTTParty::VERSION}" }
+
   def self.client_config
     Setting.plugin_redmine_openid_connect
   end
@@ -49,7 +51,7 @@ class OicSession < ActiveRecord::Base
     expiry = client_config['dynamic_config_expiry'] || 86400
     Rails.cache.fetch("oic_session_dynamic_#{hash}", expires_in: expiry) do
       HTTParty::Basement.default_options.update(verify: false) if client_config['disable_ssl_validation']
-      ActiveSupport::HashWithIndifferentAccess.new HTTParty.get(openid_configuration_url)
+      ActiveSupport::HashWithIndifferentAccess.new HTTParty.get(openid_configuration_url, headers: @@default_headers)
     end
   end
 
@@ -68,7 +70,8 @@ class OicSession < ActiveRecord::Base
     response = HTTParty.post(
       uri,
       body: query,
-      basic_auth: {username: client_config['client_id'], password: client_config['client_secret'] }
+      basic_auth: {username: client_config['client_id'], password: client_config['client_secret'] },
+      headers: @@default_headers
     )
   end
 
@@ -114,7 +117,7 @@ class OicSession < ActiveRecord::Base
     HTTParty::Basement.default_options.update(verify: false) if client_config['disable_ssl_validation']
     response = HTTParty.get(
       uri,
-      headers: { "Authorization" => "Bearer #{access_token}" }
+      headers: @@default_headers.merge({ "Authorization" => "Bearer #{access_token}" })
     )
 
     if response.headers["content-type"] == 'application/jwt'
